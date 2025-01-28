@@ -1,4 +1,14 @@
 import openai
+import re
+
+openai.api_key = "abcd-api-keyy"
+
+def extract_columns(sql_query):
+    match = re.search(r"SELECT (.+?) FROM", sql_query, re.IGNORECASE)
+    if match:
+        columns = match.group(1).split(",")
+        return [col.strip() for col in columns]
+    return []
 
 def generate_column_description(column_name, sql_query):
     prompt = f"""
