@@ -1,7 +1,11 @@
 import openai
 import re
+import os
+from dotenv import load_dotenv
 
-openai.api_key = "abcd-api-keyy"
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
 
 def extract_columns(sql_query):
     match = re.search(r"SELECT (.+?) FROM", sql_query, re.IGNORECASE)
