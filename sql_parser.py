@@ -6,7 +6,11 @@ import pandas as pd
 import re
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+from openai import OpenAI
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+)
 
 def extract_column_names(sql_query):
     select_pattern = re.compile(r"SELECT\s+(.*?)\s+FROM", re.DOTALL | re.IGNORECASE)
@@ -39,16 +43,16 @@ def generate_column_description(column_name, sql_query):
     {sql_query}
     """
     try:
-        response = openai.Completion.create(
+        response = client.chat.completions.create(
             engine="text-davinci-003",
             prompt=prompt,
             max_tokens=100,
         )
         description = response["choices"][0]["text"].strip()
-        print(f"Generated description for {column_name}: {description}")  # Debugging
+        print(f"Generated description for {column_name}: {description}")
         return description
     except Exception as e:
-        print(f"Error generating description for {column_name}: {e}")  # Debugging
+        print(f"Error generating description for {column_name}: {e}")
         return f"Description for {column_name}"
 
 def process_sql_file(sql_file_path):
