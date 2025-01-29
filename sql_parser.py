@@ -1,26 +1,27 @@
-import openai
-import sqlparse
 import os
-from dotenv import load_dotenv
-import pandas as pd
 import re
+import sqlparse
+import pandas as pd
+from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
-from openai import OpenAI
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
 
 def extract_column_names(sql_query):
+    """
+    Extract column names from a SQL SELECT statement.
+    """
     select_pattern = re.compile(r"SELECT\s+(.*?)\s+FROM", re.DOTALL | re.IGNORECASE)
-    
     select_match = select_pattern.search(sql_query)
+    
     if not select_match:
         return []
 
     select_clause = select_match.group(1)
-
     columns = re.split(r",\s*(?![^()]*\))", select_clause)
 
     column_names = []
@@ -35,31 +36,36 @@ def extract_column_names(sql_query):
 
 def generate_column_description(column_name, sql_query):
     """
-    Generate a description for a column using OpenAI.
+    Generate a description for a column using OpenAI API.
     """
     prompt = f"""
-    Generate a precise, non-repetitive description for the column "{column_name}" in the following SQL query:
+    Provide a precise and non-repetitive description for the column "{column_name}" in the following SQL query:
     
     {sql_query}
     """
+
     try:
         response = client.chat.completions.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=100,
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are an expert SQL analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=100
         )
-        description = response["choices"][0]["text"].strip()
+        description = response.choices[0].message.content.strip()
         print(f"Generated description for {column_name}: {description}")
         return description
     except Exception as e:
-        print(f"Error generating description for {column_name}: {e}")
-        return f"Description for {column_name}"
+        print(f"Error generating description for {column_name}: {str(e)}")
+        return f"Description for {column_name} (Error)"
 
 def process_sql_file(sql_file_path):
     """
     Process a SQL file and generate column descriptions.
     """
-    print(f"Processing SQL file: {sql_file_path}")  
+    print(f"Processing SQL file: {sql_file_path}")
+    
     with open(sql_file_path, "r") as file:
         sql_content = file.read()
 
@@ -83,7 +89,7 @@ def save_to_excel(results, output_file):
     """
     Save results to an Excel file.
     """
-    print(f"Saving results to Excel file: {output_file}")  # Debugging
+    print(f"Saving results to Excel file: {output_file}")
     df = pd.DataFrame(results)
     df.to_excel(output_file, index=False)
 
