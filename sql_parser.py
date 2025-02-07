@@ -2,14 +2,13 @@ import os
 import re
 import sqlparse
 import pandas as pd
+import requests
 from dotenv import load_dotenv
-from openai import OpenAI
 
 load_dotenv()
 
-client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY"),
-)
+LM_STUDIO_API_URL = "http://127.0.0.1:1234/v1/chat/completions"
+MODEL_NAME = "llama-3.2-1b-instruct"
 
 def extract_column_names(sql_query):
     """
@@ -34,31 +33,45 @@ def extract_column_names(sql_query):
     print(f"Extracted column names: {column_names}")
     return column_names
 
-def generate_column_description(column_name, sql_query):
+def generate_column_descriptions(columns, sql_query):
     """
-    Generate a description for a column using OpenAI API.
+    Generate descriptions for multiple columns using LM Studio locally.
     """
     prompt = f"""
-    Provide a precise and non-repetitive description for the column "{column_name}" in the following SQL query:
-    
+    Provide precise and non-repetitive descriptions for the following columns in the SQL query:
+
     {sql_query}
+
+    Columns: {', '.join(columns)}
+
+    For each column, provide a short description. provide only the description. and no other content in response.
     """
 
+    request_payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": "You are an expert SQL analyst."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.2,
+        "max_tokens": 500
+    }
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are an expert SQL analyst."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=100
-        )
-        description = response.choices[0].message.content.strip()
-        print(f"Generated description for {column_name}: {description}")
-        return description
+        response = requests.post(LM_STUDIO_API_URL, json=request_payload)
+        response.raise_for_status()
+        result = response.json()
+        
+        descriptions = result["choices"][0]["message"]["content"].strip().split("\n")
+        print(f"Descriptions generated: {descriptions}")
+
+        if len(descriptions) != len(columns):
+            print("Warning: Number of descriptions returned doesn't match the number of columns!")
+            return [f"Description for {col} (Error)" for col in columns]
+        return descriptions
     except Exception as e:
-        print(f"Error generating description for {column_name}: {str(e)}")
-        return f"Description for {column_name} (Error)"
+        print(f"Error generating descriptions: {str(e)}")
+        return [f"Description for {col} (Error)" for col in columns]
 
 def process_sql_file(sql_file_path):
     """
@@ -76,13 +89,14 @@ def process_sql_file(sql_file_path):
         query = query.strip()
         if query:
             columns = extract_column_names(query)
-            for col in columns:
-                description = generate_column_description(col, query)
-                results.append({
-                    "SQL Query ID": i,
-                    "Column Name": col,
-                    "Description": description
-                })
+            if columns:
+                descriptions = generate_column_descriptions(columns, query)
+                for col, description in zip(columns, descriptions):
+                    results.append({
+                        "SQL Query ID": i,
+                        "Column Name": col,
+                        "Description": description
+                    })
     return results
 
 def save_to_excel(results, output_file):
